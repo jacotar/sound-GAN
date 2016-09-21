@@ -3,26 +3,27 @@ import theano.tensor as T
 import theano
 import theano.typed_list
 
-'''
-num_conv = 5
-dimensions = [1, 7, 50, 200, 200, 300]
-window_sizes = [8, 8, 4, 4, 4]
-max_mults = [2, 2, 2, 2, 3]
 
+num_conv = 5
+dimensions = [1, 7, 25, 50, 100, 150]
+window_sizes = [8, 8, 4, 4, 4]
+max_mults = [3, 3, 3, 3, 3]
+'''
 num_conv = 1
 dimensions = [1, 124]
 window_sizes = [2024]
 max_mults = [2]
-'''
+
 num_conv = 2
 dimensions = [1, 25, 124]
 window_sizes = [64, 64]
 max_mults = [3, 3]
+'''
 
 rng = numpy.random
 filters = [theano.shared((
 		rng.rand(dimensions[i] * window_sizes[i], 
-				max_mults[i] * dimensions[i+1])-0.5)/(window_sizes[i]*0.05))
+				max_mults[i] * dimensions[i+1])-0.5)/(dimensions[i] * window_sizes[i] * 0.1))
 	for i in range(num_conv)]
 
 step_filters = [theano.shared(
@@ -31,7 +32,7 @@ step_filters = [theano.shared(
 	for i in range(num_conv)]
 
 biases = [theano.shared((
-	rng.rand(max_mults[i] * dimensions[i+1])-0.5)/(window_sizes[i]*1.0))
+	rng.rand(max_mults[i] * dimensions[i+1])-0.5))
 	for i in range(num_conv)]
 
 step_biases = [theano.shared(
@@ -41,7 +42,7 @@ step_biases = [theano.shared(
 rs = rng.RandomState(1234)
 mask_rng = theano.tensor.shared_randomstreams.RandomStreams(rs.randint(999999))
 
-discrimins = theano.shared((rng.rand(dimensions[num_conv], 1)-0.5))
+discrimins = theano.shared((rng.rand(dimensions[num_conv], 1)-0.5)*2.0)
 step_discrimins = theano.shared(numpy.zeros([dimensions[num_conv], 1], numpy.float64))
 
 bias_discrimins = theano.shared(0.0)
@@ -78,7 +79,7 @@ for i in range(num_conv):
 	
 	y = T.dot(y, filters[i]) + biases[i]
 	
-	y = T.switch(mask_rng.binomial(size=y.shape, p=0.7), y, 0)
+	y = T.switch(mask_rng.binomial(size=y.shape, p=0.8), y, 0)
 
 	y = T.reshape(y, [batch_size, num, dimensions[i+1], max_mults[i]])
 	
@@ -100,11 +101,11 @@ grad_bias_discrimins = T.grad(cost, bias_discrimins)
 train = theano.function([x, sources], [discr, cost], updates=
 	[(step_filters[i], step_filters[i]*0.7 + grad_filters[i]) for i in range(num_conv)] + 
 	[(step_biases[i], step_biases[i]*0.7 + grad_biases[i]) for i in range(num_conv)] + 
-	[(step_discrimins, step_discrimins*0.3+ grad_discrimins)] + 
-	[(step_bias_discrimins, step_bias_discrimins*0.3 + grad_bias_discrimins)]+
+	[(step_discrimins, step_discrimins*0.7+ grad_discrimins)] + 
+	[(step_bias_discrimins, step_bias_discrimins*0.7 + grad_bias_discrimins)]+
 
-	[(filters[i], filters[i] + 0.0001 * step_filters[i]) for i in range(num_conv)] + 
-	[(biases[i], biases[i] + 0.0001 * step_biases[i]) for i in range(num_conv)] + 
+	[(filters[i], filters[i] + 0.01 * step_filters[i]) for i in range(num_conv)] + 
+	[(biases[i], biases[i] + 0.01 * step_biases[i]) for i in range(num_conv)] + 
 	[(discrimins, discrimins + 0.01 *step_discrimins)] + 
 	[(bias_discrimins, bias_discrimins + 0.01 * step_bias_discrimins)]
 	)
@@ -114,7 +115,7 @@ predict = theano.function([x], [discr])
 import wave
 
 batch_size = 50
-sample_size = numpy.product(window_sizes)
+sample_size = numpy.product(window_sizes[0:num_conv])
 
 fichier_A = wave.open('Cymbals/Rev_Crsh.wav')
 fichier_B = wave.open('Cymbals/Ride_01.wav')
