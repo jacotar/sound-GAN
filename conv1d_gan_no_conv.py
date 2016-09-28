@@ -1,7 +1,6 @@
 import numpy
 import theano.tensor as T
 import theano
-import theano.typed_list
 
 
 num_conv = 5
