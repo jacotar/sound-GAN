@@ -1,7 +1,7 @@
 import numpy
 import theano
 import theano.tensor as T
-
+import pickle
 
 class Convolution:
 	def __init__(self, num, dims, wins, mults, maxs):
@@ -11,16 +11,49 @@ class Convolution:
 		self.mults = mults
 		self.maxs = maxs
 
+	@classmethod
+	def from_pickle(self, pickle_file):
+		#self.num = pickle_file.load()
+		#self.dims = pickle_file.load()
+		#self.wins = pickle_file.load()
+		#self.mults = pickle_file.load()
+		#self.maxs = pickle_file.load()
+		self = self(pickle_file.load(), 
+			pickle_file.load(), 
+			pickle_file.load(), 
+			pickle_file.load(), 
+			pickle_file.load() 
+			)
+		
+		self.filters = []		
+		self.biases = []		
+
+		for i in range(self.num):
+			self.filters.append(theano.shared(pickle_file.load()))
+			self.biases.append(theano.shared(pickle_file.load()))
+		return self
+
 	def init_random(self):
 		self.filters = [theano.shared((
-			numpy.random.rand(self.dims[i] * self.wins[i], 
-			self.maxs[i] * self.dims[i+1] * self.mults[i])-0.5)/(self.dims[i] * self.wins[i] * self.mults[i] * 0.6))
+			numpy.random.rand(self.wins[i], self.dims[i], 
+			self.maxs[i], self.dims[i+1], self.mults[i])-0.5) * 2.0/numpy.sqrt(self.dims[i] * self.wins[i] * self.mults[i]))
 			for i in range(self.num)]
 		
 		self.biases = [theano.shared((
-			numpy.random.rand(self.maxs[i] * self.dims[i+1])-0.5))
+			numpy.random.rand(self.maxs[i], self.dims[i+1])-0.5))
 			for i in range(self.num)]
 		
+	def dump(self, pickle_file):
+		pickle_file.dump(self.num)
+		pickle_file.dump(self.dims)
+		pickle_file.dump(self.wins)
+		pickle_file.dump(self.mults)
+		pickle_file.dump(self.maxs)
+		
+		for i in range(self.num):
+			pickle_file.dump(self.filters[i].get_value())
+			pickle_file.dump(self.biases[i].get_value())
+			
 
 	def apply(self, x):
 		num = self.num
@@ -32,37 +65,23 @@ class Convolution:
 		rs = numpy.random.RandomState(1234)
 		mask_rng = theano.tensor.shared_randomstreams.RandomStreams(rs.randint(999999))
 
-
 		self.x = x
 		batch_size, k, dim0 = T.shape(x)
 		y = x
 
 		for i in range(num):
 			k = k / wins[i]
-			y = T.reshape(y[:, 0:k*wins[i], :], 
-					[batch_size * k, wins[i]*dims[i]])
+			y = T.reshape(y[:, 0:k*wins[i], :], [batch_size, k, wins[i], dims[i]])
 			
-			y = T.reshape(T.dot(y, self.filters[i]), [batch_size, k, maxs[i] * dims[i+1] * mults[i]])
+			y = T.tensordot(y, self.filters[i], [[2, 3], [0, 1]])
+			y = T.reshape(y, [batch_size, k, maxs[i], dims[i+1]])
 
-			'''	
-			y = T.zeros([batch_size, k+mults[i]-1, wins[i]*dims[i]])
-			for j in range(mults[i]):
-				y = T.inc_subtensor(y[:, j:k+j, :], old_y[:, :, maxs[i] * dims[i+1] * j : maxs[i] * dims[i+1] * (j+1)])
-			'''
-			k = k + mults[i] - 1
+			y = y + T.reshape(self.biases[i], [1, 1, maxs[i], dims[i+1]])
 
-			y = y + self.biases[i]
+			#y = T.switch(mask_rng.binomial(size=y.shape, p=0.7), y, 0)
 
-			y = T.switch(mask_rng.binomial(size=y.shape, p=0.4), y, 0)
-
-			y = T.reshape(y, [batch_size, k, dims[i+1], maxs[i]])
+			y = y.max(2)
 			
-			y = y.max(3)
-			
-			y = y - y.mean([0, 1], keepdims=True)
-				
-			#y = y / (T.sqr(y).mean([0, 1], keepdims=True).sqrt() + 0.1)
-			y = y / (abs(y).mean([0, 1], keepdims=True) + 0.1)
 		
 		self.y = y
 		return y
@@ -83,55 +102,49 @@ class Deconvolution:
 		self.mults = mults
 		self.maxs = maxs
 
+	@classmethod
+	def from_pickle(self, pickle_file):
+		#self.num = pickle_file.load()
+		#self.dims = pickle_file.load()
+		#self.wins = pickle_file.load()
+		#self.mults = pickle_file.load()
+		#self.maxs = pickle_file.load()
+		self = self(pickle_file.load(), 
+			pickle_file.load(), 
+			pickle_file.load(), 
+			pickle_file.load(), 
+			pickle_file.load() 
+			)
+
+		self.filters = []		
+		self.biases = []		
+
+		for i in range(self.num):
+			self.filters.append(theano.shared(pickle_file.load()))
+			self.biases.append(theano.shared(pickle_file.load()))
+		return self
+
 	def init_random(self):
 		self.filters = [theano.shared((
 			numpy.random.rand(self.dims[i], 
-			self.wins[i] * self.maxs[i] * self.dims[i+1] * self.mults[i])-0.5)/(self.dims[i] * self.wins[i] * self.mults[i] * 0.3))
+			self.wins[i], self.maxs[i], self.dims[i+1], self.mults[i])-0.5)*2.0/numpy.sqrt(self.dims[i] * self.wins[i] * self.mults[i]))
 			for i in range(self.num)]
 		
 		self.biases = [theano.shared((
-			numpy.random.rand(self.maxs[i] * self.dims[i+1])-0.5))
+			numpy.random.rand(self.maxs[i], self.dims[i+1])-0.5))
 			for i in range(self.num)]
-	def init_random_with_sample(self, x):
-		num = self.num
-		dims = self.dims
-		wins = self.wins
-		mults = self.mults
-		maxs = self.maxs
-			
-		self.filters = []
-		self.bias = []
 	
-		batch_size, k, dim0 = T.shape(x)
-		y = T.reshape(x, [batch_size * k, dim0])
+	def dump(self, pickle_file):
+		pickle_file.dump(self.num)
+		pickle_file.dump(self.dims)
+		pickle_file.dump(self.wins)
+		pickle_file.dump(self.mults)
+		pickle_file.dump(self.maxs)
 		
-		for i in range(num):
-			filt = numpy.random.rand(dims[i], wins[i] * maxs[i] * dims[i+1] * mults[i])-0.5
-			bias = numpy.random.rand(maxs[i] * dims[i+1]) - 0.5
-			x = numpy.reshape(numpy.dot(y, filt), [batch_size, k*wins[i], maxs[i] * dims[i+1] * mults[i]])
-			k = (k + mults[i] - 1) * wins[i]
-			
-			y = y + bias
+		for i in range(self.num):
+			pickle_file.dump(self.filters[i].get_value())
+			pickle_file.dump(self.biases[i].get_value())
 
-			#y = T.switch(mask_rng.binomial(size=y.shape, p=0.8), y, 0)
-
-			y = T.reshape(y, [batch_size, k, maxs[i], dims[i+1]])
-			
-			y = y.max(2)
-
-			exp = numpy.mean(y, [0, 1], keepdims=True);
-			var = 0.2 + numpy.square(numpy.mean(numpy.square(y - exp), [0, 1], keepdims=True))
-
-			bias = numpy.reshape(bias, [1, maxs[i], dims[i+1]]) / var - exp
-			filt = numpy.reshape(filt, [dims[i]*mults[i]*wins[i], maxs[i], dims[i+1]]) / var
-			
-			self.filters[i] = theano.shared(numpy.reshape(filt, [dims[i], wins[i]*mults[i]*maxs[i]*wins[i] * dims[i+1]]))
-			self.biases[i] = theano.shared(numpy.reshape(bias, [maxs[i]*dims[i+1]]))
-
-		self.y = y
-		return y
-			
-	
 	def apply(self, x):
 		num = self.num
 		dims = self.dims
@@ -139,46 +152,23 @@ class Deconvolution:
 		mults = self.mults
 		maxs = self.maxs
 		
-		rs = numpy.random.RandomState(1234)
-		mask_rng = theano.tensor.shared_randomstreams.RandomStreams(rs.randint(999999))
-
 
 		self.x = x
 		batch_size, k, dim0 = T.shape(x)
-		y = T.reshape(x, [batch_size * k, dim0])
+		y = T.reshape(x, [batch_size, k, dim0])
 
 		for i in range(num):
-			#k = k / wins[i]
-			#y = T.reshape(y[:, 0:k*wins[i], :], 
-			#		[batch_size * k, wins[i]*dim[i]])
 			
-			old_y = T.reshape(T.dot(y, self.filters[i]), 
-				[batch_size, k * wins[i], 
-				maxs[i] * dims[i+1], mults[i]])
+			y = T.tensordot(y, self.filters[i], [[2], [0]])
+			y = T.reshape(y, [batch_size, k*wins[i], maxs[i], dims[i+1]])
 
-			
-			y = T.zeros([batch_size, wins[i] * (k + mults[i] - 1), dims[i+1] * maxs[i]])
-			for j in range(mults[i]):
-				y = T.inc_subtensor(y[:, j*wins[i]:(k+j)*wins[i], :], 
-					old_y[:, :, :, j])
-			
-			
 
-			k = (k + mults[i] - 1) * wins[i]
+			k = k * wins[i]
 			
-			y = y + self.biases[i]
+			y = y + T.reshape(self.biases[i], [1, 1, maxs[i], dims[i+1]])
 
-			#y = T.switch(mask_rng.binomial(size=y.shape, p=0.8), y, 0)
-
-			y = T.reshape(y, [batch_size, k, maxs[i], dims[i+1]])
-			
 			y = y.max(2)
 			
-			if i < num-1:
-				y = y - y.mean([0, 1], keepdims=True)
-				#y = y / (T.sqr(y).mean([0, 1], keepdims=True).sqrt() + 0.1)
-				y = y / (abs(y).mean([0, 1], keepdims=True) + 0.1)
-		
 		
 		self.y = y
 		return y
