@@ -30,8 +30,8 @@ class Maxs:
 
 	def __call__(self, x):
 		sh = T.shape(x)
-		x = T.reshape(x, [self.dim, self.k, sh[1], sh[2]])
-		x = x.max(1)
+		x = T.reshape(x, [sh[0], sh[1], self.k, self.dim])
+		x = x.max(2)
 		#x = T.reshape(x, [self.dim, sh[1], sh[2]])
 		return x
 
@@ -45,8 +45,8 @@ class MaxsZero:
 
 	def __call__(self, x):
 		sh = T.shape(x)
-		x = T.reshape(x, [self.dim, self.k, sh[1], sh[2]])
-		x = x.max(1)
+		x = T.reshape(x, [sh[0], sh[1], self.k, self.dim])
+		x = x.max(2)
 		x = T.nnet.nnet.relu(x)
 		return x
 
