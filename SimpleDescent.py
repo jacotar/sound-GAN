@@ -50,7 +50,7 @@ class AdaGrad:
 			for i in range(self.num)]
 		ups += [(self.parameters[i], 
 			self.parameters[i]
-				+ learning_rate * self.gradients[i] / (0.1 + self.variances[i])) 
+				+ learning_rate * self.gradients[i] / (5.0 + self.variances[i])) 
 			for i in range(self.num)]
 		return theano.function(inputs, outputs, updates=ups)
 

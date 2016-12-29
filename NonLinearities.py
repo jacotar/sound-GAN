@@ -50,6 +50,7 @@ class MaxsZero:
 		x = T.nnet.nnet.relu(x)
 		return x
 
+
 class Identity:
 	def __init__(self):
 		pass

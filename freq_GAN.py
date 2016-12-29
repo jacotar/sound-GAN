@@ -36,7 +36,7 @@ class Discriminator:
 			for i in range(num)]
 		
 		self.direct_filters = [theano.shared(
-				numpy.random.normal(0.0, 0.5/numpy.sqrt(dim[i+1]), [dim[i+1], last_last_dim])) 
+				numpy.random.normal(0.0, numpy.power(0.5, i-num)/numpy.sqrt(dim[i+1]), [dim[i+1], last_last_dim])) 
 				for i in range(num)]
 		self.direct_biases = theano.shared(numpy.zeros(last_last_dim))
 
@@ -60,8 +60,8 @@ class Discriminator:
 			k = k / win
 			y = T.reshape(y[:, 0:k*win, :], [batch_size, k, win, dim])
 			y = T.tensordot(y, self.filters[i], [[2, 3], [0, 1]])
-			if i < self.num - 1:
-				y = T.switch(mask_rng.binomial(size=y.shape, p=0.5), y, 0)
+			#if i < self.num - 1:
+			#	y = T.switch(mask_rng.binomial(size=y.shape, p=0.5), y, 0)
 			y = self.nonlin[i](y + self.biases[i])
 
 			discr += T.tensordot(y, self.direct_filters[i], [[2], [0]]).mean([1], keepdims=True)
@@ -155,7 +155,7 @@ class Generator:
 			for i in range(num)]
 
 		self.direct_filters = [
-			theano.shared(numpy.random.normal(0.0, 1.0/numpy.sqrt(dim[i]), 
+			theano.shared(numpy.random.normal(0.0, numpy.power(0.5, i)/numpy.sqrt(dim[i]), 
 				[gen_dim, direct_next_dim[i]]))
 			for i in range(num)]
 		self.direct_biases = [
@@ -204,7 +204,10 @@ class Generator:
 	
 	def getGradients(self, cost, mult=1.0):	
 		return [T.grad(cost, param)*mult for param in self.getParameters()] 
-	
+
+	def normL1(self):
+		return numpy.mean([numpy.mean(numpy.absolute(param.get_value()), axis=tuple(range(len(param.get_value().shape)))) 
+			for param in self.getParameters()])
 #	def getAutoencoderGradients(self, cost, mult=1.0):	
 #		return [T.grad(cost, param)*mult for param in self.getAutoencoderParameters()] 
 

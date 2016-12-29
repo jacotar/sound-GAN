@@ -17,8 +17,12 @@ encoder = freq_GAN.Discriminator.load(path + "/encoder.p")
 sample_size = generator.size_from(1)
 
 #sampler = sampling.AudioFileSampler("but_one_day.wav", sample_size)
-sampler = sampling.AudioFileFreqSampler("but_one_day.wav", sample_size, 128, 20)
+#sampler = sampling.AudioFileFreqSampler("but_one_day.wav", sample_size, 128, 20)
 #sampler = sampling.SinusSampler(sample_size)
+import pickle
+with open(path+"/gaussian_process.p", "rb") as f:
+	pick = pickle.Unpickler(f)
+	sampler = sampling.GaussianProcess(sample_size, pick.load(), 0.2)
 
 ######################
 
@@ -32,27 +36,28 @@ xx = generator(z)
 mean_enc = z.mean(0)
 var_enc = T.sqr(z - mean_enc).mean([0, 1])
 
-cost_enc = -T.sqr(xx - x).mean([0, 1, 2])
-cost_enc += -T.sqr(mean_enc).mean()*0.1 - T.sqr(T.log(var_enc)).mean()*0.001
+cost_enc = -T.norm(xx - x, axis=[0, 1, 2])
+cost_enc += -T.norm(mean_enc)*0.1 - T.norm(T.log(var_enc))*0.001
+cost_enc += -0.1 * generator.normL1()
 
 
 ######################
 time = T.dscalar('t')
 
-param_gen = generator.getParameters() + encoder.getParameters()
-grad_gen = generator.getGradients(cost_enc, T.exp(-time / 500)) + encoder.getGradients(cost_enc, T.exp(-time / 500)) 
+param_gen = encoder.getParameters() + generator.getParameters()
+grad_gen = encoder.getGradients(cost_enc, T.exp(-time / 500)) + generator.getGradients(cost_enc, T.exp(-time / 500)) 
 
 
 descent = SimpleDescent.AdaGrad(param_gen, grad_gen)
 
-train = descent.step([x, time], [xx, cost_enc], 0.1)
+train = descent.step([x, time], [xx, cost_enc], 0.02)
 
 ###################
 
 batch_size = 100
-steps = 600
+steps = 300
 for t in range(steps):
-        xx, temp = sampler.batch(batch_size)
+        xx = sampler.batch(batch_size)
         xxx, cost = train(xx, t)
 
         print cost
@@ -66,10 +71,12 @@ encoder.save(path+"/encoder.p")
 import matplotlib.pyplot as P
 
 batch_size = 5
-ff_in, xx_in = sampler.batch(batch_size)
 
-ff_gen, cost = train(ff_in, 0)
-xx_gen = sampler.inverse_transform(ff_gen)
+xx_in = sampler.batch(batch_size)
+
+xx_gen, cost = train(xx_in, 0)
+#xx_gen = sampler.inverse_transform(ff_gen)
+
 
 
 
@@ -81,7 +88,7 @@ for i in range(batch_size):
 
 P.subplot(212)
 for i in range(batch_size):
-        P.plot(xx_gen[i, :])
+        P.plot(xx_gen[i, :, 0])
 
 P.show()
 
