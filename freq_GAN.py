@@ -122,11 +122,9 @@ class Discriminator:
 		
 
 class Generator:
-	def __init__(self, gen_dim, direct_nonlin, dim, win, nonlin):
+	def __init__(self, dim, win, nonlin):
 		self.num = len(win)
-		self.gen_dim = gen_dim
-		self.direct_nonlin = direct_nonlin
-		self.direct_next_dim = [direct_nonlin[i].mod_dim(dim[i]) for i in range(self.num)]
+		self.gen_dim = dim[0]
 
 		self.dim = dim
 		self.win = win
@@ -137,13 +135,10 @@ class Generator:
 		return numpy.product(self.win) * n
 
 	def init_random(self):
-		gen_dim = self.gen_dim
-		direct_next_dim = self.direct_next_dim
 		num = self.num
 		dim = self.dim
 		win = self.win
 		next_dim = self.next_dim
-		nonlin = self.nonlin
 
 		# 1D deconvolution
 		self.filters = [
@@ -154,27 +149,14 @@ class Generator:
 			theano.shared(numpy.zeros(next_dim[i]))
 			for i in range(num)]
 
-		self.direct_filters = [
-			theano.shared(numpy.random.normal(0.0, numpy.power(0.5, i)/numpy.sqrt(dim[i]), 
-				[gen_dim, direct_next_dim[i]]))
-			for i in range(num)]
-		self.direct_biases = [
-			theano.shared(numpy.zeros(direct_next_dim[i]))
-			for i in range(num)]
-	
 	def __call__(self, z):
-		v = 0
+		v = z
 		k = 1
 		self.vs = []
 		for i in range(self.num):
 			dim = self.dim[i]
 			win = self.win[i]
-			direct_next_dim = self.direct_next_dim[i]
 			next_dim = self.next_dim[i]
-			
-			init = T.tensordot(z, self.direct_filters[i], [[1], [0]]) + self.direct_biases[i]
-			
-			v += self.direct_nonlin[i](T.reshape(init, [-1, 1, direct_next_dim]))
 			
 			v = T.tensordot(v, self.filters[i], [[2], [0]])
 			v = T.reshape(v, [-1, k*win, next_dim])
@@ -197,10 +179,7 @@ class Generator:
 			for i in range(self.num)]
 
 	def getParameters(self):
-		return self.filters + self.biases  + self.direct_filters + self.direct_biases
-	
-#	def getAutoencoderParameters(self):
-#		return self.dual_filters + self.dual_biases + self.filters + self.biases
+		return self.filters + self.biases
 	
 	def getGradients(self, cost, mult=1.0):	
 		return [T.grad(cost, param)*mult for param in self.getParameters()] 
@@ -208,12 +187,8 @@ class Generator:
 	def normL1(self):
 		return numpy.mean([numpy.mean(numpy.absolute(param.get_value()), axis=tuple(range(len(param.get_value().shape)))) 
 			for param in self.getParameters()])
-#	def getAutoencoderGradients(self, cost, mult=1.0):	
-#		return [T.grad(cost, param)*mult for param in self.getAutoencoderParameters()] 
 
 	def writePickle(self, pickle_file):
-		pickle_file.dump(self.gen_dim)
-		pickle_file.dump(self.direct_nonlin)
 		pickle_file.dump(self.dim)
 		pickle_file.dump(self.win)
 		pickle_file.dump(self.nonlin)
@@ -221,8 +196,6 @@ class Generator:
 		for i in range(self.num):
 			pickle_file.dump(self.filters[i].get_value())
 			pickle_file.dump(self.biases[i].get_value())
-			pickle_file.dump(self.direct_filters[i].get_value())
-			pickle_file.dump(self.direct_biases[i].get_value())
 	
 	def save(self, path):
 		with open(path, "wb") as f:
@@ -232,14 +205,10 @@ class Generator:
 		pickle_file.load()
 		pickle_file.load()
 		pickle_file.load()
-		pickle_file.load()
-		pickle_file.load()
 		
 		for i in range(self.num):
 			self.filters[i].set_value(pickle_file.load())
 			self.biases[i].set_value(pickle_file.load())
-			self.direct_filters[i].set_value(pickle_file.load())
-			self.direct_biases[i].set_value(pickle_file.load())
 	
 	@classmethod
 	def load(self, path):
@@ -248,20 +217,14 @@ class Generator:
 	
 			self = self(pickle_file.load(),
 				pickle_file.load(),
-				pickle_file.load(),
-				pickle_file.load(),
 				pickle_file.load())
 
 			self.filters = []
 			self.biases = []
-			self.direct_filters = []
-			self.direct_biases = []
 	
 			for i in range(self.num):
 				self.filters.append(theano.shared(pickle_file.load()))
 				self.biases.append(theano.shared(pickle_file.load()))
-				self.direct_filters.append(theano.shared(pickle_file.load()))
-				self.direct_biases.append(theano.shared(pickle_file.load()))
 	
 			return self		
 

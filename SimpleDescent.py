@@ -66,7 +66,7 @@ class Momentum:
 		self.momentum = [theano.shared(numpy.zeros(self.parameters[i].get_value().shape)) for i in range(self.num)]
 		# self.gradients = [T.grad(costs[i], parameters[i]) for i in range(num)]
 
-	def step(self, inputs, outputs, learning_rate=0.1, rec=0.8):
+	def step(self, inputs, outputs, learning_rate=0.1, rec=0.9):
 		ups = [(self.momentum[i],
 			self.momentum[i]*rec + (1-rec) * self.gradients[i])
 			for i in range(self.num)]
